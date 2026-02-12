@@ -8,6 +8,7 @@ import javadev.project.producer.dto.product.ProductDTO;
 import javadev.project.producer.dto.product.ProductRequest;
 import javadev.project.producer.entity.category;
 import javadev.project.producer.entity.product;
+import javadev.project.producer.entity.stockLog;
 import javadev.project.producer.entity.supplier;
 import javadev.project.producer.repository.CategoryRepository;
 import javadev.project.producer.repository.ProductRepository;
@@ -79,7 +80,14 @@ public class ProductService {
         product.setSupplier(supplier);
         product.setCurrentStock(productRequest.getCurrentStock());
         product.setPrice(productRequest.getPrice());
-        productRepository.save(product);
+        product savedProduct = productRepository.save(product);
+
+        // Create stock log entry for PURCHASE
+        stockLog stockLog = new stockLog();
+        stockLog.setProduct(savedProduct);
+        stockLog.setQuantityChange(savedProduct.getCurrentStock());
+        stockLog.setLogType("PURCHASE");
+        stockLogRepository.save(stockLog);
     }
 
     /**
@@ -131,6 +139,9 @@ public class ProductService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Product not found with id: " + id));
 
+        // Store old stock value for comparison
+        Integer oldStock = existingProduct.getCurrentStock();
+
         // Fetch category and supplier entities
         category category = categoryRepository.findById(productRequest.getCategoryId())
                 .orElseThrow(() -> new ResponseStatusException(
@@ -148,6 +159,20 @@ public class ProductService {
         existingProduct.setPrice(productRequest.getPrice());
 
         product updatedProduct = productRepository.save(existingProduct);
+
+        // Check if current_stock has changed
+        if (!oldStock.equals(productRequest.getCurrentStock())) {
+            // Calculate stock difference
+            Integer quantityChange = productRequest.getCurrentStock() - oldStock;
+
+            // Create stock log entry for ADJUSTMENT
+            stockLog stockLog = new stockLog();
+            stockLog.setProduct(updatedProduct);
+            stockLog.setQuantityChange(quantityChange);
+            stockLog.setLogType("ADJUSTMENT");
+            stockLogRepository.save(stockLog);
+        }
+
         return convertToDTO(updatedProduct);
     }
 

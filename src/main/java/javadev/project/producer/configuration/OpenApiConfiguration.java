@@ -48,8 +48,17 @@ public class OpenApiConfiguration {
     @Bean
     public GroupedOpenApi reportManagementApi() {
         return GroupedOpenApi.builder()
-                .group("Report Management")
+                .group("Report Log")
                 .pathsToMatch("/api/v1/report/**")
+                .packagesToScan("javadev.project.producer.controller")
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi transactionManagementApi() {
+        return GroupedOpenApi.builder()
+                .group("Transaction")
+                .pathsToMatch("/api/v1/transaction/**")
                 .packagesToScan("javadev.project.producer.controller")
                 .build();
     }
