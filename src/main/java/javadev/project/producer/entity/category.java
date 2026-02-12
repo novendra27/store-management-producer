@@ -23,8 +23,8 @@ public class category {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "category_id", length = 50)
-    private String categoryId;
+    @Column(name = "category_name", length = 50)
+    private String categoryName;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

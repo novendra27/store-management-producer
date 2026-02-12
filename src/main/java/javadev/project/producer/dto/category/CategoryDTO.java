@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @Builder
 public class CategoryDTO {
     private Integer id;
-    private String categoryId;
+    private String categoryName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
