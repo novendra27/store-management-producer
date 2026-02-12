@@ -44,4 +44,13 @@ public class OpenApiConfiguration {
                 .packagesToScan("javadev.project.producer.controller")
                 .build();
     }
+
+    @Bean
+    public GroupedOpenApi reportManagementApi() {
+        return GroupedOpenApi.builder()
+                .group("Report Management")
+                .pathsToMatch("/api/v1/report/**")
+                .packagesToScan("javadev.project.producer.controller")
+                .build();
+    }
 }
