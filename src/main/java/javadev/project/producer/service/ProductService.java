@@ -11,7 +11,9 @@ import javadev.project.producer.entity.product;
 import javadev.project.producer.entity.supplier;
 import javadev.project.producer.repository.CategoryRepository;
 import javadev.project.producer.repository.ProductRepository;
+import javadev.project.producer.repository.StockLogRepository;
 import javadev.project.producer.repository.SupplierRepository;
+import javadev.project.producer.repository.TransactionDetailRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,12 @@ public class ProductService {
 
     @Autowired
     private SupplierRepository supplierRepository;
+
+    @Autowired
+    private TransactionDetailRepository transactionDetailRepository;
+
+    @Autowired
+    private StockLogRepository stockLogRepository;
 
     @Autowired
     private Validator validator;
@@ -145,15 +153,34 @@ public class ProductService {
 
     /**
      * Deletes a product from the database by its ID
+     * Checks if the product is currently being used in transaction details or stock logs
+     * If the product is in use, the deletion is prevented
      * 
      * @param id the ID of the product to delete
-     * @throws ResponseStatusException if product is not found with the given ID
+     * @throws ResponseStatusException if product is not found or is currently in use
      */
     @Transactional
     public void deleteProduct(Integer id) {
         product existingProduct = productRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Product not found with id: " + id));
+
+        // Check if product is being used in transaction details
+        long transactionDetailCount = transactionDetailRepository.countByProduct(existingProduct);
+        if (transactionDetailCount > 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Cannot delete product. It is currently being used in " + transactionDetailCount + " transaction detail(s)");
+        }
+
+        // Check if product is being used in stock logs
+        long stockLogCount = stockLogRepository.countByProduct(existingProduct);
+        if (stockLogCount > 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Cannot delete product. It has " + stockLogCount + " stock log record(s)");
+        }
+
         productRepository.delete(existingProduct);
     }
 
