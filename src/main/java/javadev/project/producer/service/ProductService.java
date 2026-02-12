@@ -1,0 +1,179 @@
+package javadev.project.producer.service;
+
+import jakarta.transaction.Transactional;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
+import javadev.project.producer.dto.product.ProductDTO;
+import javadev.project.producer.dto.product.ProductRequest;
+import javadev.project.producer.entity.category;
+import javadev.project.producer.entity.product;
+import javadev.project.producer.entity.supplier;
+import javadev.project.producer.repository.CategoryRepository;
+import javadev.project.producer.repository.ProductRepository;
+import javadev.project.producer.repository.SupplierRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Service
+public class ProductService {
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Autowired
+    private CategoryRepository categoryRepository;
+
+    @Autowired
+    private SupplierRepository supplierRepository;
+
+    @Autowired
+    private Validator validator;
+
+    /**
+     * Creates a new product in the system
+     * Validates the product request, fetches related category and supplier
+     * entities,
+     * and persists the product to the database
+     * 
+     * @param productRequest the product data to be created
+     * @throws ConstraintViolationException if validation fails
+     * @throws ResponseStatusException      if category or supplier is not found
+     */
+    @Transactional
+    public void createProduct(ProductRequest productRequest) {
+        // Validate the incoming request
+        Set<ConstraintViolation<ProductRequest>> violations = validator.validate(productRequest);
+        if (!violations.isEmpty()) {
+            throw new ConstraintViolationException(violations);
+        }
+
+        // Fetch category and supplier entities
+        category category = categoryRepository.findById(productRequest.getCategoryId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Category not found with id: " + productRequest.getCategoryId()));
+
+        supplier supplier = supplierRepository.findById(productRequest.getSupplierId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Supplier not found with id: " + productRequest.getSupplierId()));
+
+        // Map ProductRequest to Product entity
+        product product = new product();
+        product.setSku(productRequest.getSku());
+        product.setProductName(productRequest.getProductName());
+        product.setCategory(category);
+        product.setSupplier(supplier);
+        product.setCurrentStock(productRequest.getCurrentStock());
+        product.setPrice(productRequest.getPrice());
+        productRepository.save(product);
+    }
+
+    /**
+     * Retrieves all products from the database
+     * Converts each product entity to ProductDTO for response
+     * 
+     * @return List of ProductDTO containing all products
+     */
+    public List<ProductDTO> getAllProducts() {
+        return productRepository.findAll().stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Retrieves a single product by its ID
+     * 
+     * @param id the ID of the product to retrieve
+     * @return ProductDTO containing the product details
+     * @throws ResponseStatusException if product is not found with the given ID
+     */
+    public ProductDTO getProductById(Integer id) {
+        product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Product not found with id: " + id));
+        return convertToDTO(product);
+    }
+
+    /**
+     * Updates an existing product with new data
+     * Validates the product request, fetches related entities, and updates the
+     * product
+     * 
+     * @param id             the ID of the product to update
+     * @param productRequest the new product data
+     * @return ProductDTO containing the updated product details
+     * @throws ConstraintViolationException if validation fails
+     * @throws ResponseStatusException      if product, category, or supplier is not
+     *                                      found
+     */
+    @Transactional
+    public ProductDTO updateProduct(Integer id, ProductRequest productRequest) {
+        Set<ConstraintViolation<ProductRequest>> violations = validator.validate(productRequest);
+        if (!violations.isEmpty()) {
+            throw new ConstraintViolationException(violations);
+        }
+
+        product existingProduct = productRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Product not found with id: " + id));
+
+        // Fetch category and supplier entities
+        category category = categoryRepository.findById(productRequest.getCategoryId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Category not found with id: " + productRequest.getCategoryId()));
+
+        supplier supplier = supplierRepository.findById(productRequest.getSupplierId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Supplier not found with id: " + productRequest.getSupplierId()));
+
+        existingProduct.setSku(productRequest.getSku());
+        existingProduct.setProductName(productRequest.getProductName());
+        existingProduct.setCategory(category);
+        existingProduct.setSupplier(supplier);
+        existingProduct.setCurrentStock(productRequest.getCurrentStock());
+        existingProduct.setPrice(productRequest.getPrice());
+
+        product updatedProduct = productRepository.save(existingProduct);
+        return convertToDTO(updatedProduct);
+    }
+
+    /**
+     * Deletes a product from the database by its ID
+     * 
+     * @param id the ID of the product to delete
+     * @throws ResponseStatusException if product is not found with the given ID
+     */
+    @Transactional
+    public void deleteProduct(Integer id) {
+        product existingProduct = productRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Product not found with id: " + id));
+        productRepository.delete(existingProduct);
+    }
+
+    /**
+     * Converts a product entity to ProductDTO for API response
+     * 
+     * @param product the product entity to convert
+     * @return ProductDTO containing the product data
+     */
+    private ProductDTO convertToDTO(product product) {
+        return ProductDTO.builder()
+                .id(product.getId())
+                .sku(product.getSku())
+                .categoryId(product.getCategory().getId())
+                .supplierId(product.getSupplier().getId())
+                .productName(product.getProductName())
+                .currentStock(product.getCurrentStock())
+                .price(product.getPrice())
+                .createdAt(product.getCreatedAt())
+                .updatedAt(product.getUpdatedAt())
+                .build();
+    }
+}
