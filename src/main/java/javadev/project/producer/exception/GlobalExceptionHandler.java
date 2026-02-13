@@ -3,6 +3,8 @@ package javadev.project.producer.exception;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import javadev.project.producer.dto.product.ProductResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -18,6 +20,8 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+        private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
         /**
          * Handles ResponseStatusException thrown when a resource is not found or other
          * HTTP status errors occur
@@ -27,6 +31,13 @@ public class GlobalExceptionHandler {
          */
         @ExceptionHandler(ResponseStatusException.class)
         public ResponseEntity<ProductResponse<String>> handleResponseStatusException(ResponseStatusException ex) {
+                // Log based on status code
+                if (ex.getStatusCode().is4xxClientError()) {
+                        logger.warn("Client error: status={}, reason={}", ex.getStatusCode(), ex.getReason());
+                } else {
+                        logger.error("Server error: status={}, reason={}", ex.getStatusCode(), ex.getReason(), ex);
+                }
+
                 return ResponseEntity
                                 .status(ex.getStatusCode())
                                 .body(ProductResponse.<String>builder()
@@ -52,6 +63,8 @@ public class GlobalExceptionHandler {
                                 .map(ConstraintViolation::getMessage)
                                 .collect(Collectors.joining(", "));
 
+                logger.warn("Validation error: violations={}", errors);
+
                 return ResponseEntity
                                 .status(HttpStatus.BAD_REQUEST)
                                 .body(ProductResponse.<String>builder()
@@ -76,6 +89,8 @@ public class GlobalExceptionHandler {
                                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                                 .collect(Collectors.joining(", "));
 
+                logger.warn("Method argument validation error: fields={}", errors);
+
                 return ResponseEntity
                                 .status(HttpStatus.BAD_REQUEST)
                                 .body(ProductResponse.<String>builder()
@@ -96,6 +111,8 @@ public class GlobalExceptionHandler {
         @ExceptionHandler(HttpMessageNotReadableException.class)
         public ResponseEntity<ProductResponse<String>> handleHttpMessageNotReadableException(
                         HttpMessageNotReadableException ex) {
+                logger.warn("Invalid request body: error={}", ex.getMessage());
+
                 return ResponseEntity
                                 .status(HttpStatus.BAD_REQUEST)
                                 .body(ProductResponse.<String>builder()
@@ -154,6 +171,11 @@ public class GlobalExceptionHandler {
          */
         @ExceptionHandler(Exception.class)
         public ResponseEntity<ProductResponse<String>> handleGeneralException(Exception ex) {
+                logger.error("Unexpected error occurred: type={}, message={}",
+                                ex.getClass().getName(),
+                                ex.getMessage(),
+                                ex);
+
                 return ResponseEntity
                                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                                 .body(ProductResponse.<String>builder()

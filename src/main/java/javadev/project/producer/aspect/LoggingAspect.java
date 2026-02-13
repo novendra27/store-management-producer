@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
@@ -83,7 +84,8 @@ public class LoggingAspect {
 
     /**
      * Log when an exception is thrown from any controller method
-     * Captures error details including exception type and message
+     * For business exceptions (ResponseStatusException), only logs the message
+     * For unexpected errors, logs full stack trace for debugging
      * 
      * @param joinPoint contains information about the intercepted method
      * @param exception the thrown exception
@@ -96,14 +98,30 @@ public class LoggingAspect {
             String method = request.getMethod();
             String uri = request.getRequestURI();
 
-            logger.error("[ERROR] {} | {} {} | Method: {}.{}() | Exception: {} - {}",
-                    timestamp,
-                    method,
-                    uri,
-                    joinPoint.getSignature().getDeclaringTypeName(),
-                    joinPoint.getSignature().getName(),
-                    exception.getClass().getSimpleName(),
-                    exception.getMessage());
+            // Check if this is a business exception (expected) or unexpected error
+            if (exception instanceof ResponseStatusException) {
+                // Business exception - just log the message without stack trace
+                ResponseStatusException rse = (ResponseStatusException) exception;
+                logger.warn("[ERROR] {} | {} {} | Method: {}.{}() | Status: {} | Message: {}",
+                        timestamp,
+                        method,
+                        uri,
+                        joinPoint.getSignature().getDeclaringTypeName(),
+                        joinPoint.getSignature().getName(),
+                        rse.getStatusCode(),
+                        rse.getReason());
+            } else {
+                // Unexpected exception - log with full stack trace
+                logger.error("[ERROR] {} | {} {} | Method: {}.{}() | Exception: {} - {}",
+                        timestamp,
+                        method,
+                        uri,
+                        joinPoint.getSignature().getDeclaringTypeName(),
+                        joinPoint.getSignature().getName(),
+                        exception.getClass().getSimpleName(),
+                        exception.getMessage(),
+                        exception);
+            }
         }
     }
 

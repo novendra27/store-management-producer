@@ -15,6 +15,8 @@ import javadev.project.producer.repository.ProductRepository;
 import javadev.project.producer.repository.StockLogRepository;
 import javadev.project.producer.repository.SupplierRepository;
 import javadev.project.producer.repository.TransactionDetailRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,9 @@ import java.util.stream.Collectors;
 
 @Service
 public class ProductService {
+
+    private static final Logger logger = LoggerFactory.getLogger(ProductService.class);
+    private static final int LOW_STOCK_THRESHOLD = 10;
 
     @Autowired
     private ProductRepository productRepository;
@@ -88,6 +93,21 @@ public class ProductService {
         stockLog.setQuantityChange(savedProduct.getCurrentStock());
         stockLog.setLogType("PURCHASE");
         stockLogRepository.save(stockLog);
+
+        logger.info("New product created: product_id={}, product_name={}, initial_stock={}",
+                savedProduct.getId(),
+                savedProduct.getProductName(),
+                savedProduct.getCurrentStock());
+
+        // Check for low stock warning
+        if (savedProduct.getCurrentStock() <= LOW_STOCK_THRESHOLD) {
+            logger.warn(
+                    "Low stock alert on new product: product_id={}, product_name={}, current_stock={}, threshold={}",
+                    savedProduct.getId(),
+                    savedProduct.getProductName(),
+                    savedProduct.getCurrentStock(),
+                    LOW_STOCK_THRESHOLD);
+        }
     }
 
     /**
@@ -171,6 +191,22 @@ public class ProductService {
             stockLog.setQuantityChange(quantityChange);
             stockLog.setLogType("ADJUSTMENT");
             stockLogRepository.save(stockLog);
+
+            logger.info("Stock adjusted: product_id={}, product_name={}, old_stock={}, new_stock={}, change={}",
+                    updatedProduct.getId(),
+                    updatedProduct.getProductName(),
+                    oldStock,
+                    productRequest.getCurrentStock(),
+                    quantityChange);
+        }
+
+        // Check for low stock warning
+        if (updatedProduct.getCurrentStock() <= LOW_STOCK_THRESHOLD) {
+            logger.warn("Low stock alert: product_id={}, product_name={}, current_stock={}, threshold={}",
+                    updatedProduct.getId(),
+                    updatedProduct.getProductName(),
+                    updatedProduct.getCurrentStock(),
+                    LOW_STOCK_THRESHOLD);
         }
 
         return convertToDTO(updatedProduct);
@@ -178,34 +214,51 @@ public class ProductService {
 
     /**
      * Deletes a product from the database by its ID
-     * Checks if the product is currently being used in transaction details or stock logs
+     * Checks if the product is currently being used in transaction details or stock
+     * logs
      * If the product is in use, the deletion is prevented
      * 
      * @param id the ID of the product to delete
-     * @throws ResponseStatusException if product is not found or is currently in use
+     * @throws ResponseStatusException if product is not found or is currently in
+     *                                 use
      */
     @Transactional
     public void deleteProduct(Integer id) {
         product existingProduct = productRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Product not found with id: " + id));
+                .orElseThrow(() -> {
+                    logger.error("Product not found for deletion: product_id={}", id);
+                    return new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "Product not found with id: " + id);
+                });
 
         // Check if product is being used in transaction details
         long transactionDetailCount = transactionDetailRepository.countByProduct(existingProduct);
         if (transactionDetailCount > 0) {
+            logger.warn("Cannot delete product in use: product_id={}, product_name={}, transaction_count={}",
+                    existingProduct.getId(),
+                    existingProduct.getProductName(),
+                    transactionDetailCount);
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Cannot delete product. It is currently being used in " + transactionDetailCount + " transaction detail(s)");
+                    "Cannot delete product. It is currently being used in " + transactionDetailCount
+                            + " transaction detail(s)");
         }
 
         // Check if product is being used in stock logs
         long stockLogCount = stockLogRepository.countByProduct(existingProduct);
         if (stockLogCount > 0) {
+            logger.warn("Cannot delete product with stock logs: product_id={}, product_name={}, stock_log_count={}",
+                    existingProduct.getId(),
+                    existingProduct.getProductName(),
+                    stockLogCount);
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "Cannot delete product. It has " + stockLogCount + " stock log record(s)");
         }
 
+        logger.info("Product deleted: product_id={}, product_name={}",
+                existingProduct.getId(),
+                existingProduct.getProductName());
         productRepository.delete(existingProduct);
     }
 
